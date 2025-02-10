@@ -8,7 +8,8 @@ import (
 )
 
 type AuthHandler struct {
-	
+	proto.UnimplementedAuthServer
+
 	*Handler 
 }
 
