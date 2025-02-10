@@ -2,8 +2,14 @@ package domain
 
 import "context"
 
+type AuthEvent struct {
+	UserID           string
+	Name             Username
+	FullEmailAddress Email
+}
+
 type AuthMessageBusser interface {
-	SendRegisterEvent(ctx context.Context, event RegisterEvent) StatusCode
+	SendRegisterEvent(ctx context.Context, event AuthEvent) StatusCode
 }
 
 type LoginData struct {
@@ -11,9 +17,17 @@ type LoginData struct {
 	hashedPassword Password
 }
 
-type AuthReader interface {
+type UserCredentials struct {
+	UserID               string
+	Username             Username
+	StandardEmailAddress Email
+	HashedPassword       Password
+}
+
+type AuthReaderWriter interface {
 	GetLoginByName(ctx context.Context, name Username) (LoginData, StatusCode)
 	GetLoginByEmail(ctx context.Context, email Email) (LoginData, StatusCode)
+	CreateLogin(ctx context.Context, request UserCredentials) StatusCode
 }
 
 type AuthRequest struct {

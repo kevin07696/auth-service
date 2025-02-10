@@ -7,55 +7,68 @@ import (
 )
 
 type AuthService struct {
-	hasher Hasher
-	bus    AuthMessageBusser
-	reader AuthReader
+	hasher       Hasher
+	bus          AuthMessageBusser
+	readerWriter AuthReaderWriter
 }
 
-func NewAuthService(hasher Hasher, bus AuthMessageBusser, reader AuthReader) AuthService {
+func NewAuthService(hasher Hasher, bus AuthMessageBusser, reader AuthReaderWriter) AuthService {
 	return AuthService{
-		hasher: hasher,
-		bus:    bus,
-		reader: reader,
+		hasher:       hasher,
+		bus:          bus,
+		readerWriter: reader,
 	}
 }
 
-func (a AuthService) Register(ctx context.Context, request AuthRequest) (AuthResponse, StatusCode) {
+func (a AuthService) Register(ctx context.Context, request AuthRequest) (response AuthResponse, status StatusCode) {
 	var isValid bool
 
 	var username Username
 	username, isValid = NewUsername(request.Username)
 	if !isValid {
-		return AuthResponse{}, StatusBadRequest
+		status = StatusBadRequest
+		return
 	}
 
 	var emailComponents EmailComponents
 	emailComponents, isValid = NewEmailComponents(request.Email)
 	if !isValid {
-		return AuthResponse{}, StatusBadRequest
+		status = StatusBadRequest
+		return
 	}
 
 	var password Password
 	password, isValid = NewPassword(request.Password)
 	if !isValid {
-		return AuthResponse{}, StatusBadRequest
+		status = StatusBadRequest
+		return
 	}
 	password = password.HashPassword(a.hasher)
 
-	registerEvent := RegisterEvent{
+	userCredentials := UserCredentials{
 		UserID:               uuid.NewString(),
-		Name:                 username,
-		Password:             password,
-		FullEmailAddress:     emailComponents.ToFullString(),
+		Username:             username,
 		StandardEmailAddress: emailComponents.ToStandardString(),
+		HashedPassword:       password,
 	}
 
-	status := a.bus.SendRegisterEvent(ctx, registerEvent)
+	status = a.readerWriter.CreateLogin(ctx, userCredentials)
 	if status > 0 {
-		return AuthResponse{}, status
+		return
+	}
+	registerEvent := AuthEvent{
+		UserID:           userCredentials.UserID,
+		Name:             username,
+		FullEmailAddress: emailComponents.ToFullString(),
 	}
 
-	return AuthResponse{UserID: registerEvent.UserID}, StatusOK
+	status = a.bus.SendRegisterEvent(ctx, registerEvent)
+	if status > 0 {
+		return
+	}
+
+	response.UserID = userCredentials.UserID
+	return
 }
 
 func (a AuthService) Login(ctx context.Context, request AuthRequest) (response AuthResponse, status StatusCode) {
@@ -64,7 +77,8 @@ func (a AuthService) Login(ctx context.Context, request AuthRequest) (response A
 	var password Password
 	password, isValid = NewPassword(request.Password)
 	if !isValid {
-		return AuthResponse{}, StatusBadRequest
+		status = StatusBadRequest
+		return
 	}
 
 	var loginData LoginData
@@ -72,26 +86,29 @@ func (a AuthService) Login(ctx context.Context, request AuthRequest) (response A
 	var username Username
 	username, isValid = NewUsername(request.Username)
 	if isValid {
-		loginData, status = a.reader.GetLoginByName(ctx, username)
+		loginData, status = a.readerWriter.GetLoginByName(ctx, username)
 		if status > 0 {
-			return AuthResponse{}, status
+			return
 		}
 	} else {
 		var emailComponents EmailComponents
 		emailComponents, isValid = NewEmailComponents(request.Email)
 		if !isValid {
-			return AuthResponse{}, StatusBadRequest
+			status = StatusBadRequest
+			return
 		}
-		loginData, status = a.reader.GetLoginByEmail(ctx, emailComponents.ToStandardString())
+		loginData, status = a.readerWriter.GetLoginByEmail(ctx, emailComponents.ToStandardString())
 		if status > 0 {
-			return AuthResponse{}, status
+			return
 		}
 	}
 
 	isValid = a.hasher.VerifyPassword(loginData.hashedPassword, password)
 	if !isValid {
-		return AuthResponse{}, StatusUnauthorized
+		status = StatusUnauthorized
+		return
 	}
 
-	return AuthResponse{UserID: loginData.UserID}, StatusOK
+	response.UserID = loginData.UserID
+	return
 }

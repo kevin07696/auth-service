@@ -18,16 +18,16 @@ func main() {
 	slog.SetDefault(logger)
 
 	var hasher domain.Hasher
-	var authReader domain.AuthReader
+	var authReaderWriter domain.AuthReaderWriter
 	var authMessageBusser domain.AuthMessageBusser
 	var authServicer domain.AuthServicer
 	var handler *handlers.Handler
 
 	hasher = adapters.NewBcryptAdapter(14)
 
-	authServicer = domain.NewAuthService(hasher, authMessageBusser, authReader)
+	authServicer = domain.NewAuthService(hasher, authMessageBusser, authReaderWriter)
 
-	handler = handlers.NewHandler(authServicer, authReader)
+	handler = handlers.NewHandler(authServicer)
 
 	grpcServer, err := handlers.NewServer(handler)
 	if err != nil {
@@ -53,5 +53,5 @@ func main() {
 	sig := <-quit
 	logger.Info("Received signal. Shutting down...", "signal", sig)
 
-	os.Exit(0) // Exit gracefully
+	grpcServer.Server().GracefulStop()
 }

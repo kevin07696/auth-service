@@ -6,5 +6,5 @@ type Hasher interface {
 }
 
 type PubSub interface {
-	SendMessage(topicID string, userEvent RegisterEvent)
+	SendMessage(topicID string, userEvent AuthEvent)
 }

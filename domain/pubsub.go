@@ -16,6 +16,6 @@ func NewAuthPubSub(registerTopicID, loginTopicID string, pubsub PubSub) AuthPubS
 	}
 }
 
-func SendRegisterEvent(ctx context.Context, event RegisterEvent) StatusCode {
+func SendRegisterEvent(ctx context.Context, event AuthEvent) StatusCode {
 	return StatusOK
 }

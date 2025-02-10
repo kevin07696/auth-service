@@ -9,15 +9,13 @@ type Handler struct {
 	proto.UnimplementedAuthServer
 
 	Service      domain.AuthServicer
-	Reader       domain.AuthReader
 	ErrorHandler []error
 }
 
-func NewHandler(service domain.AuthServicer, reader domain.AuthReader) *Handler {
+func NewHandler(service domain.AuthServicer) *Handler {
 
 	return &Handler{
 		Service:      service,
-		Reader:       reader,
 		ErrorHandler: initErrorHandler(),
 	}
 }

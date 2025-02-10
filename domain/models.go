@@ -38,11 +38,3 @@ func (e EmailComponents) ToFullString() Email {
 	builder.WriteString(e.Domain)
 	return Email(builder.String())
 }
-
-type RegisterEvent struct {
-	UserID               string
-	Name                 Username
-	Password             Password
-	FullEmailAddress     Email
-	StandardEmailAddress Email
-}
