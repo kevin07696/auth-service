@@ -2,25 +2,21 @@ package domain
 
 import (
 	"context"
-
-	"github.com/google/uuid"
 )
 
 type AuthService struct {
-	hasher       Hasher
-	bus          AuthMessageBusser
-	readerWriter AuthReaderWriter
+	hasher Hasher
+	repo   Repositor
 }
 
-func NewAuthService(hasher Hasher, bus AuthMessageBusser, reader AuthReaderWriter) AuthService {
+func NewLoginService(hasher Hasher, repo Repositor) AuthService {
 	return AuthService{
-		hasher:       hasher,
-		bus:          bus,
-		readerWriter: reader,
+		hasher: hasher,
+		repo:   repo,
 	}
 }
 
-func (a AuthService) Register(ctx context.Context, request AuthRequest) (response AuthResponse, status StatusCode) {
+func (a AuthService) Register(ctx context.Context, request LoginRequest) (response LoginResponse, status StatusCode) {
 	var isValid bool
 
 	var username Username
@@ -45,33 +41,22 @@ func (a AuthService) Register(ctx context.Context, request AuthRequest) (respons
 	}
 	password = password.HashPassword(a.hasher)
 
-	userCredentials := UserCredentials{
-		UserID:               uuid.NewString(),
+	login := Login{
 		Username:             username,
 		StandardEmailAddress: emailComponents.ToStandardString(),
 		HashedPassword:       password,
 	}
 
-	status = a.readerWriter.CreateLogin(ctx, userCredentials)
-	if status > 0 {
-		return
-	}
-	registerEvent := AuthEvent{
-		UserID:           userCredentials.UserID,
-		Name:             username,
-		FullEmailAddress: emailComponents.ToFullString(),
-	}
-
-	status = a.bus.SendRegisterEvent(ctx, registerEvent)
+	status = a.repo.CreateLogin(ctx, &login)
 	if status > 0 {
 		return
 	}
 
-	response.UserID = userCredentials.UserID
+	response.LoginID = login.ID
 	return
 }
 
-func (a AuthService) Login(ctx context.Context, request AuthRequest) (response AuthResponse, status StatusCode) {
+func (a AuthService) Login(ctx context.Context, request LoginRequest) (response LoginResponse, status StatusCode) {
 	var isValid bool
 
 	var password Password
@@ -81,12 +66,12 @@ func (a AuthService) Login(ctx context.Context, request AuthRequest) (response A
 		return
 	}
 
-	var loginData LoginData
+	var login Login
 
 	var username Username
 	username, isValid = NewUsername(request.Username)
 	if isValid {
-		loginData, status = a.readerWriter.GetLoginByName(ctx, username)
+		login, status = a.repo.GetLoginByUsername(ctx, username)
 		if status > 0 {
 			return
 		}
@@ -97,18 +82,18 @@ func (a AuthService) Login(ctx context.Context, request AuthRequest) (response A
 			status = StatusBadRequest
 			return
 		}
-		loginData, status = a.readerWriter.GetLoginByEmail(ctx, emailComponents.ToStandardString())
+		login, status = a.repo.GetLoginByEmail(ctx, emailComponents.ToStandardString())
 		if status > 0 {
 			return
 		}
 	}
 
-	isValid = a.hasher.VerifyPassword(loginData.hashedPassword, password)
+	isValid = a.hasher.VerifyPassword(login.HashedPassword, password)
 	if !isValid {
 		status = StatusUnauthorized
 		return
 	}
 
-	response.UserID = loginData.UserID
+	response.LoginID = login.ID
 	return
 }

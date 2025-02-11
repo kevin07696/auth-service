@@ -6,36 +6,50 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/kevin07696/auth-service/adapters"
-	"github.com/kevin07696/auth-service/domain"
-	"github.com/kevin07696/auth-service/handlers"
-	"github.com/kevin07696/auth-service/proto"
+	"github.com/kevin07696/login-service/adapters"
+	"github.com/kevin07696/login-service/domain"
+	"github.com/kevin07696/login-service/handlers"
+	"github.com/kevin07696/login-service/proto"
+	health "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	var hasher domain.Hasher
-	var authReaderWriter domain.AuthReaderWriter
-	var authMessageBusser domain.AuthMessageBusser
-	var authServicer domain.AuthServicer
+	var hash domain.Hasher
+	var repository domain.Repositor
+	var service handlers.LoginServicer
 	var handler *handlers.Handler
 
-	hasher = adapters.NewBcryptAdapter(14)
+	hash = adapters.NewBcryptAdapter(14)
 
-	authServicer = domain.NewAuthService(hasher, authMessageBusser, authReaderWriter)
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  "user=gorm password=gorm dbname=gorm port=9920 sslmode=disable TimeZone=Asia/Shanghai",
+		PreferSimpleProtocol: true, // disables implicit prepared statement usage
+	}), &gorm.Config{})
+	if err != nil {
+		logger.Error("failed to init db server", "error", err)
+		os.Exit(1)
+	}
+	domain.NewLoginRepository(db)
 
-	handler = handlers.NewHandler(authServicer)
+	service = domain.NewLoginService(hash, repository)
+
+	handler = handlers.NewHandler(service)
 
 	grpcServer, err := handlers.NewServer(handler)
 	if err != nil {
-		logger.Error("failed to init new grpc server", "error", err)
+		logger.Error("failed to init grpc server", "error", err)
 		os.Exit(1)
 	}
 
-	proto.RegisterAuthServer(grpcServer.Server(), handlers.NewAuthHandler(handler))
+	health.RegisterHealthServer(grpcServer.Server(), handlers.NewHealthHandler())
+	proto.RegisterLoginServer(grpcServer.Server(), handlers.NewLoginHandler(handler))
 
 	reflection.Register(grpcServer.Server())
 
