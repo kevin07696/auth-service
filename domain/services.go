@@ -2,96 +2,101 @@ package domain
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"fmt"
+	"log/slog"
 )
 
 type AuthService struct {
 	hasher Hasher
-	bus    AuthMessageBusser
-	reader AuthReader
+	repo   Repositor
 }
 
-func NewAuthService(hasher Hasher, bus AuthMessageBusser, reader AuthReader) AuthService {
+func NewLoginService(hasher Hasher, repo Repositor) AuthService {
 	return AuthService{
 		hasher: hasher,
-		bus:    bus,
-		reader: reader,
+		repo:   repo,
 	}
 }
 
-func (a AuthService) Register(ctx context.Context, request AuthRequest) (AuthResponse, StatusCode) {
+func (a AuthService) Register(ctx context.Context, request CreateLoginRequest) (response LoginResponse, status StatusCode) {
 	var isValid bool
 
 	var username Username
 	username, isValid = NewUsername(request.Username)
 	if !isValid {
-		return AuthResponse{}, StatusBadRequest
+		slog.Error("Failed username validation")
+		status = StatusBadRequest
+		return
 	}
 
 	var emailComponents EmailComponents
 	emailComponents, isValid = NewEmailComponents(request.Email)
 	if !isValid {
-		return AuthResponse{}, StatusBadRequest
+		slog.Error("Failed email validation")
+		status = StatusBadRequest
+		return
 	}
 
 	var password Password
 	password, isValid = NewPassword(request.Password)
 	if !isValid {
-		return AuthResponse{}, StatusBadRequest
+		slog.Error("Failed password validation")
+		status = StatusBadRequest
+		return
 	}
 	password = password.HashPassword(a.hasher)
 
-	registerEvent := RegisterEvent{
-		UserID:               uuid.NewString(),
-		Name:                 username,
-		Password:             password,
-		FullEmailAddress:     emailComponents.ToFullString(),
-		StandardEmailAddress: emailComponents.ToStandardString(),
+	login := Login{
+		Username:       string(username),
+		Email:          string(emailComponents.ToStandardString()),
+		HashedPassword: string(password),
 	}
 
-	status := a.bus.SendRegisterEvent(ctx, registerEvent)
+	status = a.repo.CreateLogin(ctx, &login)
 	if status > 0 {
-		return AuthResponse{}, status
+		return
 	}
 
-	return AuthResponse{UserID: registerEvent.UserID}, StatusOK
+	response.LoginID = fmt.Sprint(login.ID)
+	return
 }
 
-func (a AuthService) Login(ctx context.Context, request AuthRequest) (response AuthResponse, status StatusCode) {
+func (a AuthService) Login(ctx context.Context, request LoginRequest) (response LoginResponse, status StatusCode) {
 	var isValid bool
 
 	var password Password
 	password, isValid = NewPassword(request.Password)
 	if !isValid {
-		return AuthResponse{}, StatusBadRequest
+		status = StatusBadRequest
+		return
 	}
 
-	var loginData LoginData
+	var login Login
 
-	var username Username
-	username, isValid = NewUsername(request.Username)
+	var emailComponents EmailComponents
+	emailComponents, isValid = NewEmailComponents(request.UserInput)
 	if isValid {
-		loginData, status = a.reader.GetLoginByName(ctx, username)
+		login, status = a.repo.GetLoginByEmail(ctx, emailComponents.ToStandardString())
 		if status > 0 {
-			return AuthResponse{}, status
+			return
 		}
 	} else {
-		var emailComponents EmailComponents
-		emailComponents, isValid = NewEmailComponents(request.Email)
-		if !isValid {
-			return AuthResponse{}, StatusBadRequest
-		}
-		loginData, status = a.reader.GetLoginByEmail(ctx, emailComponents.ToStandardString())
-		if status > 0 {
-			return AuthResponse{}, status
+		var username Username
+		username, isValid = NewUsername(request.UserInput)
+		if isValid {
+			login, status = a.repo.GetLoginByUsername(ctx, username)
+			if status > 0 {
+				return
+			}
 		}
 	}
 
-	isValid = a.hasher.VerifyPassword(loginData.hashedPassword, password)
+	isValid = a.hasher.VerifyPassword(Password(login.HashedPassword), password)
 	if !isValid {
-		return AuthResponse{}, StatusUnauthorized
+		status = StatusUnauthorized
+		return
 	}
 
-	return AuthResponse{UserID: loginData.UserID}, StatusOK
+	response.LoginID = fmt.Sprint(login.ID)
+	return
 }

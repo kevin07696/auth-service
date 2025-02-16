@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option go_package = "./protos";
+
+message CreateLoginRequest {
+  string username = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message LoginRequest {
+  string user_input = 1;
+  string password = 3;
+}
+
+message LoginResponse {
+  string user_id = 1;
+}
+
+service Login {
+  rpc Register(CreateLoginRequest) returns (LoginResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+}

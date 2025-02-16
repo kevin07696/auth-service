@@ -1,32 +1,41 @@
 package domain
 
-import "context"
+import (
+	"context"
+)
 
-type AuthMessageBusser interface {
-	SendRegisterEvent(ctx context.Context, event RegisterEvent) StatusCode
+// Defines an abstraction for database operations related to the Login entity.
+type Repositor interface {
+    // Applies automatic table and index migrations for the Login entity.
+    Migrate()
+
+    // Inserts a new login record into the database.
+    // Returns a status code.
+    CreateLogin(ctx context.Context, login *Login) (status StatusCode)
+
+    // Reads a login record by username.
+    // Returns the login record and a status code.
+    GetLoginByUsername(ctx context.Context, username Username) (login Login, status StatusCode)
+
+    // Reads a login record by email address.
+    // Returns the login record and a status code.
+    GetLoginByEmail(ctx context.Context, emailAddress Email) (login Login, status StatusCode)
 }
 
-type LoginData struct {
-	UserID         string
-	hashedPassword Password
+// The unvalidated service payload used to create a new login.
+type CreateLoginRequest struct {
+    Username string `json:"username" binding:"required"`
+    Email    string `json:"email" binding:"required,email"`
+    Password string `json:"password" binding:"required"`
 }
 
-type AuthReader interface {
-	GetLoginByName(ctx context.Context, name Username) (LoginData, StatusCode)
-	GetLoginByEmail(ctx context.Context, email Email) (LoginData, StatusCode)
+// The unvalidated service payload used to verify a login.
+type LoginRequest struct {
+	UserInput string
+	Password  string
 }
 
-type AuthRequest struct {
-	Username string
-	Email    string
-	Password string
-}
-
-type AuthResponse struct {
-	UserID string
-}
-
-type AuthServicer interface {
-	Register(ctx context.Context, request AuthRequest) (AuthResponse, StatusCode)
-	Login(ctx context.Context, request AuthRequest) (AuthResponse, StatusCode)
+// The login service response
+type LoginResponse struct {
+	LoginID string
 }
