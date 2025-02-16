@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"log"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -9,7 +11,7 @@ import (
 	"github.com/kevin07696/login-service/adapters"
 	"github.com/kevin07696/login-service/domain"
 	"github.com/kevin07696/login-service/handlers"
-	"github.com/kevin07696/login-service/proto"
+	"github.com/kevin07696/login-service/protos"
 	health "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
@@ -22,43 +24,59 @@ func main() {
 	slog.SetDefault(logger)
 
 	var hash domain.Hasher
-	var repository domain.Repositor
 	var service handlers.LoginServicer
 	var handler *handlers.Handler
 
 	hash = adapters.NewBcryptAdapter(14)
 
-	db, err := gorm.Open(postgres.New(postgres.Config{
-		DSN:                  "user=gorm password=gorm dbname=gorm port=9920 sslmode=disable TimeZone=Asia/Shanghai",
-		PreferSimpleProtocol: true, // disables implicit prepared statement usage
-	}), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open("postgres://root@cockroachdb:26257/defaultdb?sslmode=disable"), &gorm.Config{})
 	if err != nil {
 		logger.Error("failed to init db server", "error", err)
 		os.Exit(1)
 	}
-	domain.NewLoginRepository(db)
+
+	// Test the database connection
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("Failed to get the underlying sql.DB: %v", err)
+	}
+
+	if err := sqlDB.Ping(); err != nil {
+		log.Fatalf("Failed to ping the database: %v", err)
+	}
+
+	logger.Info("Successfully connected to the database")
+
+	var repository domain.Repositor = domain.NewLoginRepository(db)
+
+	repository.Migrate()
+
+	test := &domain.Login{
+		Username:       "test-user",
+		Email:          "test-user@example.com",
+		HashedPassword: "124q35ws4tdrctvybu!",
+	}
+
+	if status := repository.CreateLogin(context.TODO(), test); status > 0 {
+		logger.Error("Failed to insert sample login")
+	}
+
+	if _, status := repository.GetLoginByEmail(context.TODO(), domain.Email(test.Email)); status > 0 {
+		logger.Error("Failed to get sample login")
+	}
 
 	service = domain.NewLoginService(hash, repository)
 
 	handler = handlers.NewHandler(service)
 
-	grpcServer, err := handlers.NewServer(handler)
-	if err != nil {
-		logger.Error("failed to init grpc server", "error", err)
-		os.Exit(1)
-	}
+	server := handlers.NewServer()
 
-	health.RegisterHealthServer(grpcServer.Server(), handlers.NewHealthHandler())
-	proto.RegisterLoginServer(grpcServer.Server(), handlers.NewLoginHandler(handler))
+	health.RegisterHealthServer(server.Server(), handlers.NewHealthHandler())
+	protos.RegisterLoginServer(server.Server(), handlers.NewLoginHandler(handler))
 
-	reflection.Register(grpcServer.Server())
+	reflection.Register(server.Server())
 
-	go func() {
-		err := grpcServer.Serve()
-		if err != nil {
-			logger.Error("error serving grpc server", "error", err)
-		}
-	}()
+	go server.Serve()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -67,5 +85,5 @@ func main() {
 	sig := <-quit
 	logger.Info("Received signal. Shutting down...", "signal", sig)
 
-	grpcServer.Server().GracefulStop()
+	server.Server().GracefulStop()
 }

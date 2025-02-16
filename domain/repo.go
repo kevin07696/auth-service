@@ -3,7 +3,9 @@ package domain
 import (
 	"context"
 	"errors"
-	"log"
+	"fmt"
+	"log/slog"
+	"os"
 
 	"gorm.io/gorm"
 )
@@ -29,9 +31,27 @@ func (r LoginRepository) errorHandler(err error) StatusCode {
 }
 
 func (r LoginRepository) Migrate() {
-	if err := r.db.AutoMigrate(&Login{}); err != nil {
-		log.Fatalf("failed to migrate schema: %v", err)
+	if !r.db.Migrator().HasTable(&Login{}) {
+		if err := r.db.Migrator().CreateTable(&Login{}); err != nil {
+			slog.Error("Failed to create Login", "error", err)
+			os.Exit(1)
+		}
 	}
+
+	r.upsertIndexes(&Login{}, "uni_logins_username", "uni_logins_email")
+}
+
+func (r LoginRepository) upsertIndexes(dst interface{}, indexNames ...string) {
+	for _, indexName := range indexNames {
+		if !r.db.Migrator().HasIndex(dst, indexName) {
+			if err := r.db.Migrator().CreateIndex(&Login{}, indexName); err != nil {
+				message := fmt.Sprintf("Failed to create unique index %s.", indexName)
+				slog.Error(message, "error", err)
+				os.Exit(1)
+			}
+		}
+	}
+	slog.Info("Successfully migrated indexes.", "indexNames", indexNames)
 }
 
 func (r LoginRepository) CreateLogin(ctx context.Context, login *Login) (status StatusCode) {
@@ -45,14 +65,14 @@ func (r LoginRepository) CreateLogin(ctx context.Context, login *Login) (status 
 }
 
 func (r LoginRepository) GetLoginByUsername(ctx context.Context, username Username) (login Login, status StatusCode) {
-	login.Username = username
+	login.Username = string(username)
 
 	status = r.getLogin(ctx, &login)
 	return
 }
 
 func (r LoginRepository) GetLoginByEmail(ctx context.Context, emailAddress Email) (login Login, status StatusCode) {
-	login.StandardEmailAddress = emailAddress
+	login.Email = string(emailAddress)
 
 	status = r.getLogin(ctx, &login)
 	return

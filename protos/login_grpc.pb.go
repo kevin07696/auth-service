@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.30.0--rc1
-// source: proto/login.proto
+// source: protos/login.proto
 
-package proto
+package protos
 
 import (
 	context "context"
@@ -27,7 +27,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type LoginClient interface {
-	Register(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
+	Register(ctx context.Context, in *CreateLoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 }
 
@@ -39,7 +39,7 @@ func NewLoginClient(cc grpc.ClientConnInterface) LoginClient {
 	return &loginClient{cc}
 }
 
-func (c *loginClient) Register(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error) {
+func (c *loginClient) Register(ctx context.Context, in *CreateLoginRequest, opts ...grpc.CallOption) (*LoginResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LoginResponse)
 	err := c.cc.Invoke(ctx, Login_Register_FullMethodName, in, out, cOpts...)
@@ -63,7 +63,7 @@ func (c *loginClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.
 // All implementations must embed UnimplementedLoginServer
 // for forward compatibility.
 type LoginServer interface {
-	Register(context.Context, *LoginRequest) (*LoginResponse, error)
+	Register(context.Context, *CreateLoginRequest) (*LoginResponse, error)
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	mustEmbedUnimplementedLoginServer()
 }
@@ -75,7 +75,7 @@ type LoginServer interface {
 // pointer dereference when methods are called.
 type UnimplementedLoginServer struct{}
 
-func (UnimplementedLoginServer) Register(context.Context, *LoginRequest) (*LoginResponse, error) {
+func (UnimplementedLoginServer) Register(context.Context, *CreateLoginRequest) (*LoginResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
 }
 func (UnimplementedLoginServer) Login(context.Context, *LoginRequest) (*LoginResponse, error) {
@@ -103,7 +103,7 @@ func RegisterLoginServer(s grpc.ServiceRegistrar, srv LoginServer) {
 }
 
 func _Login_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LoginRequest)
+	in := new(CreateLoginRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func _Login_Register_Handler(srv interface{}, ctx context.Context, dec func(inte
 		FullMethod: Login_Register_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(LoginServer).Register(ctx, req.(*LoginRequest))
+		return srv.(LoginServer).Register(ctx, req.(*CreateLoginRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -155,5 +155,5 @@ var Login_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/login.proto",
+	Metadata: "protos/login.proto",
 }

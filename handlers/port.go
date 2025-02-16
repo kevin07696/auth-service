@@ -7,6 +7,6 @@ import (
 )
 
 type LoginServicer interface {
-	Register(ctx context.Context, request domain.LoginRequest) (domain.LoginResponse, domain.StatusCode)
+	Register(ctx context.Context, request domain.CreateLoginRequest) (domain.LoginResponse, domain.StatusCode)
 	Login(ctx context.Context, request domain.LoginRequest) (domain.LoginResponse, domain.StatusCode)
 }

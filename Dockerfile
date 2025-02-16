@@ -76,8 +76,6 @@ USER appuser
 
 # Copy the executable from the "build" stage.
 COPY --from=build /bin/server /bin/
-# Copy the env file from the "build" stage.
-# COPY --from=build /src/.env /.env
 
 # Expose the port that the application listens on.
 EXPOSE 8000 8000

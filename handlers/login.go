@@ -2,13 +2,14 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/kevin07696/login-service/domain"
-	"github.com/kevin07696/login-service/proto"
+	"github.com/kevin07696/login-service/protos"
 )
 
 type LoginHandler struct {
-	proto.UnimplementedLoginServer
+	protos.UnimplementedLoginServer
 
 	*Handler
 }
@@ -17,8 +18,8 @@ func NewLoginHandler(handler *Handler) *LoginHandler {
 	return &LoginHandler{Handler: handler}
 }
 
-func (h LoginHandler) Register(ctx context.Context, request *proto.LoginRequest) (*proto.LoginResponse, error) {
-	registerRequest := domain.LoginRequest{
+func (h LoginHandler) Register(ctx context.Context, request *protos.CreateLoginRequest) (*protos.LoginResponse, error) {
+	registerRequest := domain.CreateLoginRequest{
 		Username: request.Username,
 		Email:    request.Email,
 		Password: request.Password,
@@ -26,17 +27,19 @@ func (h LoginHandler) Register(ctx context.Context, request *proto.LoginRequest)
 
 	registerResponse, status := h.Service.Register(ctx, registerRequest)
 	if status > 0 {
+		slog.Error(h.ErrorHandler[status].Error())
 		return nil, h.ErrorHandler[status]
 	}
 
-	return &proto.LoginResponse{UserId: registerResponse.LoginID}, h.ErrorHandler[domain.StatusOK]
+	slog.Info("Register Login Response", "login_id", registerResponse.LoginID)
+
+	return &protos.LoginResponse{UserId: registerResponse.LoginID}, h.ErrorHandler[domain.StatusOK]
 }
 
-func (h LoginHandler) Login(ctx context.Context, request *proto.LoginRequest) (*proto.LoginResponse, error) {
+func (h LoginHandler) Login(ctx context.Context, request *protos.LoginRequest) (*protos.LoginResponse, error) {
 	loginRequest := domain.LoginRequest{
-		Username: request.Username,
-		Email:    request.Email,
-		Password: request.Password,
+		UserInput: request.UserInput,
+		Password:  request.Password,
 	}
 
 	loginResponse, status := h.Service.Login(ctx, loginRequest)
@@ -44,5 +47,5 @@ func (h LoginHandler) Login(ctx context.Context, request *proto.LoginRequest) (*
 		return nil, h.ErrorHandler[status]
 	}
 
-	return &proto.LoginResponse{UserId: loginResponse.LoginID}, h.ErrorHandler[domain.StatusOK]
+	return &protos.LoginResponse{UserId: loginResponse.LoginID}, h.ErrorHandler[domain.StatusOK]
 }
